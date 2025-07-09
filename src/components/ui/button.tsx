@@ -9,7 +9,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 neon-glow",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
@@ -18,12 +18,18 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        blockchain: "bg-gradient-primary text-primary-foreground hover:scale-105 transition-all duration-300 shadow-lg neon-glow",
+        success: "bg-success text-success-foreground hover:bg-success/90 shadow-lg",
+        warning: "bg-warning text-warning-foreground hover:bg-warning/90 shadow-lg",
+        accent: "bg-gradient-accent text-accent-foreground hover:scale-105 transition-all duration-300 neon-glow",
+        glow: "bg-primary text-primary-foreground animate-pulse-glow hover:animate-none",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
         icon: "h-10 w-10",
+        xl: "h-14 px-10 text-lg",
       },
     },
     defaultVariants: {
