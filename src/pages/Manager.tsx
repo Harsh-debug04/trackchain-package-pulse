@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { QrCode, Send, Database, Wifi, Activity, AlertCircle, CheckCircle, Settings, Zap, User, Package } from "lucide-react";
+import { useState, useEffect } from "react";
+import { QrCode, Send, Database, Wifi, Activity, AlertCircle, CheckCircle, Settings, Zap, User, Package, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { QRCodeSVG } from 'qrcode.react';
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 interface BlockchainStatus {
   connected: boolean;
@@ -22,13 +26,15 @@ interface DatabaseStatus {
   activeConnections: number;
 }
 
-const Manager = () => {
-  const [managerId, setManagerId] = useState("");
+const ManagerContent = () => {
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const [packageId, setPackageId] = useState("");
   const [newStage, setNewStage] = useState("");
   const [sealStatus, setSealStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [qrData, setQrData] = useState("");
+  const [recentUpdates, setRecentUpdates] = useState<any[]>([]);
 
   // Mock blockchain status
   const [blockchainStatus] = useState<BlockchainStatus>({
@@ -57,36 +63,110 @@ const Manager = () => {
 
   const sealStatuses = ["Intact", "Broken", "Replaced"];
 
+  useEffect(() => {
+    fetchRecentUpdates();
+  }, []);
+
+  const fetchRecentUpdates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('package_updates')
+        .select(`
+          *,
+          packages (package_id)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setRecentUpdates(data || []);
+    } catch (error) {
+      console.error('Error fetching recent updates:', error);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!managerId || !packageId || !newStage || !sealStatus) return;
+    if (!packageId || !newStage || !sealStatus) return;
 
     setIsSubmitting(true);
     
-    // Generate QR code data
-    const qrData = JSON.stringify({
-      packageId,
-      managerId,
-      stage: newStage,
-      sealStatus,
-      timestamp: new Date().toISOString()
-    });
-    setQrData(qrData);
+    try {
+      // Check if package exists
+      const { data: packageData, error: packageError } = await supabase
+        .from('packages')
+        .select('*')
+        .eq('package_id', packageId)
+        .single();
 
-    // Simulate blockchain transaction
-    setTimeout(() => {
-      setIsSubmitting(false);
+      if (packageError || !packageData) {
+        toast({
+          title: "Package not found",
+          description: "Please check the package ID and try again.",
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Update package status
+      const { error: updateError } = await supabase
+        .from('packages')
+        .update({
+          current_stage: newStage,
+          seal_status: sealStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('package_id', packageId);
+
+      if (updateError) throw updateError;
+
+      // Insert package update record
+      const { error: insertError } = await supabase
+        .from('package_updates')
+        .insert({
+          package_id: packageData.id,
+          stage: newStage,
+          seal_status: sealStatus,
+          updated_by: user?.id,
+          notes: `Updated by ${user?.email}`
+        });
+
+      if (insertError) throw insertError;
+
+      // Generate QR code data
+      const qrData = JSON.stringify({
+        packageId,
+        stage: newStage,
+        sealStatus,
+        timestamp: new Date().toISOString(),
+        updatedBy: user?.email
+      });
+      setQrData(qrData);
+
+      toast({
+        title: "Package updated successfully",
+        description: `Package ${packageId} has been updated to ${newStage}.`,
+      });
+
       // Reset form
       setPackageId("");
       setNewStage("");
       setSealStatus("");
-    }, 2000);
-  };
+      
+      // Refresh recent updates
+      fetchRecentUpdates();
 
-  const recentTransactions = [
-    { hash: "0x1a2b3c4d5e6f...", status: "Confirmed", gasUsed: "21000", timestamp: "2m ago" },
-    { hash: "0x2b3c4d5e6f7a...", status: "Pending", gasUsed: "23000", timestamp: "5m ago" },
-    { hash: "0x3c4d5e6f7a8b...", status: "Confirmed", gasUsed: "19000", timestamp: "8m ago" },
-  ];
+    } catch (error) {
+      console.error('Error updating package:', error);
+      toast({
+        title: "Update failed",
+        description: "There was an error updating the package. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background blockchain-grid">
@@ -141,14 +221,14 @@ const Manager = () => {
                 <CardContent className="space-y-6">
                   <div className="space-y-4">
                     <div>
-                      <label className="text-sm font-medium mb-2 block">Manager ID</label>
+                      <label className="text-sm font-medium mb-2 block">Logged in as</label>
                       <div className="relative">
                         <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                         <Input
-                          placeholder="Enter your manager ID"
-                          value={managerId}
-                          onChange={(e) => setManagerId(e.target.value)}
-                          className="pl-10"
+                          placeholder="Manager email"
+                          value={user?.email || ''}
+                          disabled
+                          className="pl-10 bg-muted/50"
                         />
                       </div>
                     </div>
@@ -204,7 +284,7 @@ const Manager = () => {
                     variant="blockchain"
                     size="lg"
                     className="w-full"
-                    disabled={!managerId || !packageId || !newStage || !sealStatus || isSubmitting}
+                    disabled={!packageId || !newStage || !sealStatus || isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
@@ -382,25 +462,36 @@ const Manager = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentTransactions.map((tx, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-muted/20 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${
-                          tx.status === 'Confirmed' ? 'bg-success animate-pulse-glow' : 'bg-warning animate-pulse'
-                        }`}></div>
-                        <div>
-                          <div className="font-mono text-sm text-primary">{tx.hash}</div>
-                          <div className="text-xs text-muted-foreground">Gas used: {tx.gasUsed}</div>
+                  {recentUpdates.length > 0 ? (
+                    recentUpdates.map((update, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 bg-muted/20 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full bg-success animate-pulse-glow"></div>
+                          <div>
+                            <div className="font-mono text-sm text-primary">
+                              {update.packages?.package_id || 'Unknown'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {update.stage} - {update.seal_status}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="success">
+                            Confirmed
+                          </Badge>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {new Date(update.created_at).toLocaleString()}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <Badge variant={tx.status === 'Confirmed' ? 'success' : 'warning'}>
-                          {tx.status}
-                        </Badge>
-                        <div className="text-xs text-muted-foreground mt-1">{tx.timestamp}</div>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Activity className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No recent updates</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -408,6 +499,14 @@ const Manager = () => {
         </Tabs>
       </div>
     </div>
+  );
+};
+
+const Manager = () => {
+  return (
+    <ProtectedRoute>
+      <ManagerContent />
+    </ProtectedRoute>
   );
 };
 

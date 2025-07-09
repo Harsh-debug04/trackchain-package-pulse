@@ -14,7 +14,113 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      package_updates: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          package_id: string
+          seal_status: string
+          stage: string
+          updated_by: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          package_id: string
+          seal_status: string
+          stage: string
+          updated_by: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          package_id?: string
+          seal_status?: string
+          stage?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_updates_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      packages: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          current_stage: string
+          id: string
+          package_id: string
+          recipient_address: string
+          recipient_name: string
+          seal_status: string
+          sender_address: string
+          sender_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          current_stage?: string
+          id?: string
+          package_id: string
+          recipient_address: string
+          recipient_name: string
+          seal_status?: string
+          sender_address: string
+          sender_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          current_stage?: string
+          id?: string
+          package_id?: string
+          recipient_address?: string
+          recipient_name?: string
+          seal_status?: string
+          sender_address?: string
+          sender_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          role: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          role?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

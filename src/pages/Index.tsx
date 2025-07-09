@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
-import { Shield, Zap, Package, ArrowRight, Users, Lock, Globe, Activity } from "lucide-react";
+import { Shield, Zap, Package, ArrowRight, Users, Lock, Globe, Activity, UserCircle, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState(false);
+  const { user, signOut } = useAuth();
 
   useEffect(() => {
     setIsVisible(true);
@@ -49,6 +51,36 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background blockchain-grid overflow-hidden">
+      {/* Auth Header */}
+      <div className="fixed top-0 right-0 z-50 p-4">
+        {user ? (
+          <div className="flex items-center gap-3 bg-card/80 backdrop-blur-sm rounded-lg px-4 py-2 border border-border">
+            <div className="flex items-center gap-2">
+              <UserCircle className="w-5 h-5 text-primary" />
+              <span className="text-sm font-medium">Welcome back!</span>
+            </div>
+            <Button 
+              onClick={signOut} 
+              variant="outline" 
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </Button>
+          </div>
+        ) : (
+          <Button 
+            onClick={() => navigate('/auth')} 
+            variant="outline"
+            className="bg-card/80 backdrop-blur-sm border-border hover:bg-card"
+          >
+            <UserCircle className="w-4 h-4 mr-2" />
+            Sign In
+          </Button>
+        )}
+      </div>
+      
       {/* Hero Section */}
       <section className="relative py-20 lg:py-32">
         <div className="absolute inset-0 bg-gradient-blockchain opacity-5"></div>
@@ -59,7 +91,7 @@ const Index = () => {
             </Badge>
             
             <h1 className="text-6xl lg:text-8xl font-bold mb-8 gradient-text leading-tight">
-              SecureChain
+              Avikshipt
               <br />
               <span className="text-4xl lg:text-5xl text-foreground">Package Tracking</span>
             </h1>
