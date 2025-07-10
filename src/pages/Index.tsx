@@ -42,12 +42,6 @@ const Index = () => {
     }
   ];
 
-  const stats = [
-    { label: "Packages Tracked", value: "1.2M+", icon: Package },
-    { label: "Blockchain Transactions", value: "567K+", icon: Activity },
-    { label: "Supply Chain Partners", value: "2,500+", icon: Users },
-    { label: "Countries Covered", value: "45+", icon: Globe }
-  ];
 
   return (
     <div className="min-h-screen bg-background blockchain-grid overflow-hidden">
@@ -126,21 +120,6 @@ const Index = () => {
               </Button>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 max-w-4xl mx-auto">
-              {stats.map((stat, index) => (
-                <div 
-                  key={index}
-                  className={`text-center transition-all duration-700 delay-${index * 100} ${
-                    isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
-                  }`}
-                >
-                  <stat.icon className="w-8 h-8 mx-auto mb-3 text-primary animate-float" />
-                  <div className="text-3xl font-bold gradient-text mb-1">{stat.value}</div>
-                  <div className="text-sm text-muted-foreground">{stat.label}</div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </section>
