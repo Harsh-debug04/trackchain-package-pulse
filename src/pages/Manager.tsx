@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { QrCode, Send, Database, Wifi, Activity, AlertCircle, CheckCircle, Settings, Zap, User, Package, LogOut } from "lucide-react";
+import { QrCode, Send, Database, Wifi, Activity, AlertCircle, CheckCircle, Settings, Zap, User, Package, LogOut, Plus, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +35,16 @@ const ManagerContent = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [qrData, setQrData] = useState("");
   const [recentUpdates, setRecentUpdates] = useState<any[]>([]);
+  
+  // Package creation state
+  const [newPackageId, setNewPackageId] = useState("");
+  const [senderName, setSenderName] = useState("");
+  const [senderAddress, setSenderAddress] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientAddress, setRecipientAddress] = useState("");
+  const [isCreatingPackage, setIsCreatingPackage] = useState(false);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [activeLogins, setActiveLogins] = useState(0);
 
   // Mock blockchain status
   const [blockchainStatus] = useState<BlockchainStatus>({
@@ -63,8 +73,43 @@ const ManagerContent = () => {
 
   const sealStatuses = ["Intact", "Broken", "Replaced"];
 
+  const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "accent" => {
+    switch (status.toLowerCase()) {
+      case "delivered": return "success";
+      case "in transit": return "default";
+      case "dispatched": return "accent";
+      case "package created": return "secondary";
+      case "out for delivery": return "warning";
+      default: return "secondary";
+    }
+  };
+
   useEffect(() => {
     fetchRecentUpdates();
+    fetchPackages();
+    fetchActiveLogins();
+    
+    // Set up real-time subscriptions
+    const updatesSubscription = supabase
+      .channel('package_updates')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'package_updates' },
+        () => fetchRecentUpdates()
+      )
+      .subscribe();
+
+    const packagesSubscription = supabase
+      .channel('packages')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'packages' },
+        () => fetchPackages()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(updatesSubscription);
+      supabase.removeChannel(packagesSubscription);
+    };
   }, []);
 
   const fetchRecentUpdates = async () => {
@@ -82,6 +127,109 @@ const ManagerContent = () => {
       setRecentUpdates(data || []);
     } catch (error) {
       console.error('Error fetching recent updates:', error);
+    }
+  };
+
+  const fetchPackages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('packages')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPackages(data || []);
+    } catch (error) {
+      console.error('Error fetching packages:', error);
+    }
+  };
+
+  const fetchActiveLogins = async () => {
+    // For now, we'll simulate active logins. In a real app, you'd track sessions
+    setActiveLogins(Math.floor(Math.random() * 20) + 5);
+  };
+
+  const handleCreatePackage = async () => {
+    if (!newPackageId || !senderName || !senderAddress || !recipientName || !recipientAddress) return;
+
+    setIsCreatingPackage(true);
+    
+    try {
+      // Check if package ID already exists
+      const { data: existingPackage } = await supabase
+        .from('packages')
+        .select('package_id')
+        .eq('package_id', newPackageId)
+        .single();
+
+      if (existingPackage) {
+        toast({
+          title: "Package ID already exists",
+          description: "Please use a different package ID.",
+          variant: "destructive",
+        });
+        setIsCreatingPackage(false);
+        return;
+      }
+
+      // Create new package
+      const { error } = await supabase
+        .from('packages')
+        .insert({
+          package_id: newPackageId,
+          sender_name: senderName,
+          sender_address: senderAddress,
+          recipient_name: recipientName,
+          recipient_address: recipientAddress,
+          created_by: user?.id
+        });
+
+      if (error) throw error;
+
+      // Create initial package update
+      const { data: packageData } = await supabase
+        .from('packages')
+        .select('id')
+        .eq('package_id', newPackageId)
+        .single();
+
+      if (packageData) {
+        await supabase
+          .from('package_updates')
+          .insert({
+            package_id: packageData.id,
+            stage: "Package Created",
+            seal_status: "Intact",
+            updated_by: user?.id,
+            notes: `Package created by ${user?.email}`
+          });
+      }
+
+      toast({
+        title: "Package created successfully",
+        description: `Package ${newPackageId} has been added to the system.`,
+      });
+
+      // Reset form
+      setNewPackageId("");
+      setSenderName("");
+      setSenderAddress("");
+      setRecipientName("");
+      setRecipientAddress("");
+      
+      // Refresh data
+      fetchPackages();
+      fetchRecentUpdates();
+
+    } catch (error) {
+      console.error('Error creating package:', error);
+      toast({
+        title: "Creation failed",
+        description: "There was an error creating the package. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingPackage(false);
     }
   };
 
@@ -192,8 +340,12 @@ const ManagerContent = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="update" className="space-y-8">
-          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
+        <Tabs defaultValue="packages" className="space-y-8">
+          <TabsList className="grid w-full grid-cols-3 max-w-2xl mx-auto">
+            <TabsTrigger value="packages" className="flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Package Management
+            </TabsTrigger>
             <TabsTrigger value="update" className="flex items-center gap-2">
               <Package className="w-4 h-4" />
               Package Update
@@ -203,6 +355,133 @@ const ManagerContent = () => {
               System Monitor
             </TabsTrigger>
           </TabsList>
+
+          {/* Package Management Tab */}
+          <TabsContent value="packages" className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Create Package Form */}
+              <Card className="blockchain-card">
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center gap-3">
+                    <Plus className="w-6 h-6 text-primary" />
+                    Create New Package
+                  </CardTitle>
+                  <CardDescription>
+                    Add a new package to the blockchain tracking system
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Package ID</label>
+                      <Input
+                        placeholder="Enter unique package ID"
+                        value={newPackageId}
+                        onChange={(e) => setNewPackageId(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Sender Name</label>
+                      <Input
+                        placeholder="Enter sender name"
+                        value={senderName}
+                        onChange={(e) => setSenderName(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Sender Address</label>
+                      <Input
+                        placeholder="Enter sender address"
+                        value={senderAddress}
+                        onChange={(e) => setSenderAddress(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Recipient Name</label>
+                      <Input
+                        placeholder="Enter recipient name"
+                        value={recipientName}
+                        onChange={(e) => setRecipientName(e.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Recipient Address</label>
+                      <Input
+                        placeholder="Enter recipient address"
+                        value={recipientAddress}
+                        onChange={(e) => setRecipientAddress(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <Button 
+                    onClick={handleCreatePackage}
+                    variant="blockchain"
+                    size="lg"
+                    className="w-full"
+                    disabled={!newPackageId || !senderName || !senderAddress || !recipientName || !recipientAddress || isCreatingPackage}
+                  >
+                    {isCreatingPackage ? (
+                      <>
+                        <div className="animate-spin w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full mr-2" />
+                        Creating Package...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5 mr-2" />
+                        Create Package
+                      </>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Package List */}
+              <Card className="blockchain-card">
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center gap-3">
+                    <Eye className="w-6 h-6 text-accent" />
+                    Package Database
+                  </CardTitle>
+                  <CardDescription>
+                    View all packages in the system
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {packages.length > 0 ? (
+                      packages.map((pkg) => (
+                        <div key={pkg.id} className="p-4 bg-muted/20 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-mono text-sm text-primary font-bold">
+                              {pkg.package_id}
+                            </div>
+                            <Badge variant={getStatusColor(pkg.current_stage) as any}>
+                              {pkg.current_stage}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div>From: {pkg.sender_name}</div>
+                            <div>To: {pkg.recipient_name}</div>
+                            <div>Created: {new Date(pkg.created_at).toLocaleDateString()}</div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No packages in database</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           {/* Package Update Tab */}
           <TabsContent value="update" className="space-y-8">
@@ -438,12 +717,12 @@ const ManagerContent = () => {
                         {databaseStatus.responseTime}ms
                       </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Active Connections</span>
-                      <div className="font-mono text-lg font-bold text-primary">
-                        {databaseStatus.activeConnections}
-                      </div>
-                    </div>
+                     <div>
+                       <span className="text-muted-foreground">Active Logins</span>
+                       <div className="font-mono text-lg font-bold text-primary">
+                         {activeLogins}
+                       </div>
+                     </div>
                   </div>
                 </CardContent>
               </Card>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Search, Package, Clock, Shield, MapPin, User, Zap } from "lucide-react";
+import { Search, Package, Clock, Shield, MapPin, User, Zap, QrCode } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,15 +52,59 @@ const Consumer = () => {
     ]
   };
 
-  const handleTrack = async () => {
+const handleTrack = async () => {
     if (!packageId.trim()) return;
     
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setTrackingData(mockTrackingData);
+    
+    try {
+      // Query the database for the package
+      const { data: packageData, error: packageError } = await supabase
+        .from('packages')
+        .select('*')
+        .eq('package_id', packageId)
+        .single();
+
+      if (packageError || !packageData) {
+        setTrackingData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Get package updates/timeline
+      const { data: updatesData, error: updatesError } = await supabase
+        .from('package_updates')
+        .select('*')
+        .eq('package_id', packageData.id)
+        .order('created_at', { ascending: true });
+
+      if (updatesError) {
+        console.error('Error fetching updates:', updatesError);
+        setTrackingData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Format the data to match the expected structure
+      const formattedData: TrackingData = {
+        packageId: packageData.package_id,
+        status: packageData.current_stage,
+        timeline: updatesData?.map(update => ({
+          stage: update.stage,
+          managerId: update.updated_by,
+          timestamp: update.created_at,
+          sealStatus: update.seal_status,
+          location: "Distribution Center" // You can add location field to DB later
+        })) || []
+      };
+
+      setTrackingData(formattedData);
+    } catch (error) {
+      console.error('Error tracking package:', error);
+      setTrackingData(null);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const getStatusColor = (status: string): "default" | "secondary" | "destructive" | "outline" | "success" | "warning" | "accent" => {
@@ -97,7 +142,7 @@ const Consumer = () => {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
                   <Input
-                    placeholder="Enter Package ID or User ID"
+                    placeholder="Enter Package ID or scan QR code"
                     value={packageId}
                     onChange={(e) => setPackageId(e.target.value)}
                     className="pl-10 h-12 border-2 focus:border-primary transition-all duration-300"
@@ -120,6 +165,32 @@ const Consumer = () => {
                     </>
                   )}
                 </Button>
+              </div>
+              
+              {/* QR Scanner Button */}
+              <div className="text-center mb-4">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    // For demo purposes, we'll simulate QR scanning with a sample package ID
+                    const sampleQRData = JSON.stringify({
+                      packageId: "PKG-2024-001337"
+                    });
+                    try {
+                      const parsed = JSON.parse(sampleQRData);
+                      setPackageId(parsed.packageId);
+                    } catch (e) {
+                      console.error('Invalid QR data');
+                    }
+                  }}
+                >
+                  <QrCode className="w-4 h-4 mr-2" />
+                  Scan QR Code
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Click to simulate QR code scanning
+                </p>
               </div>
             </div>
           </div>
